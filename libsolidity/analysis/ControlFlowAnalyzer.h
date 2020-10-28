@@ -33,16 +33,20 @@ public:
 	bool analyze(ASTNode const& _astRoot);
 
 	bool visit(FunctionDefinition const& _function) override;
+	bool visit(ContractDefinition const& _contract) override;
 
 private:
+	void analyze(ContractDefinition const* _contract, FunctionDefinition const& _function);
 	/// Checks for uninitialized variable accesses in the control flow between @param _entry and @param _exit.
-	void checkUninitializedAccess(CFGNode const* _entry, CFGNode const* _exit, bool _emptyBody) const;
+	void checkUninitializedAccess(CFGNode const* _entry, CFGNode const* _exit, bool _emptyBody, std::string const& _contractName);
 	/// Checks for unreachable code, i.e. code ending in @param _exit, @param _revert or @param _transactionReturn
 	/// that can not be reached from @param _entry.
 	void checkUnreachable(CFGNode const* _entry, CFGNode const* _exit, CFGNode const* _revert, CFGNode const* _transactionReturn) const;
 
 	CFG const& m_cfg;
 	langutil::ErrorReporter& m_errorReporter;
+
+	std::set<VariableDeclaration const*> m_previousWarnings;
 };
 
 }

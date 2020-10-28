@@ -34,16 +34,47 @@ bool ControlFlowAnalyzer::analyze(ASTNode const& _astRoot)
 
 bool ControlFlowAnalyzer::visit(FunctionDefinition const& _function)
 {
-	if (_function.isImplemented())
-	{
-		auto const& functionFlow = m_cfg.functionFlow(_function);
-		checkUninitializedAccess(functionFlow.entry, functionFlow.exit, _function.body().statements().empty());
-		checkUnreachable(functionFlow.entry, functionFlow.exit, functionFlow.revert, functionFlow.transactionReturn);
-	}
+	if (_function.isFree() && _function.isImplemented())
+		analyze(nullptr, _function);
+
 	return false;
 }
 
-void ControlFlowAnalyzer::checkUninitializedAccess(CFGNode const* _entry, CFGNode const* _exit, bool _emptyBody) const
+void ControlFlowAnalyzer::analyze(ContractDefinition const* _contract, FunctionDefinition const& _function)
+{
+	if (!_function.isImplemented())
+		return;
+
+	auto const& functionFlow = m_cfg.functionFlow(*_contract, _function);
+	checkUninitializedAccess(
+		functionFlow.entry,
+		functionFlow.exit,
+		_function.body().statements().empty(),
+		_contract == _function.annotation().contract ? "" : _contract->name()
+	);
+	checkUnreachable(functionFlow.entry, functionFlow.exit, functionFlow.revert, functionFlow.transactionReturn);
+}
+
+bool ControlFlowAnalyzer::visit(ContractDefinition const& _contract)
+{
+	set<CallableDeclaration const*> overridden;
+
+	for (ContractDefinition const* contract: _contract.annotation().linearizedBaseContracts)
+		for (FunctionDefinition const* function: contract->definedFunctions())
+		{
+			if (overridden.count(function))
+				continue;
+
+			for (auto const* function: function->annotation().baseFunctions)
+				overridden.emplace(function);
+
+			analyze(&_contract, *function);
+		}
+
+	return true;
+}
+
+void ControlFlowAnalyzer::checkUninitializedAccess(CFGNode const* _entry, CFGNode const* _exit, bool _emptyBody, string const& _contractName)
 {
 	struct NodeInfo
 	{
@@ -154,11 +185,20 @@ void ControlFlowAnalyzer::checkUninitializedAccess(CFGNode const* _entry, CFGNod
 					" without prior assignment, which would lead to undefined behaviour."
 				);
 			else if (!_emptyBody && variableOccurrence->declaration().name().empty())
+			{
+				if (!m_previousWarnings.emplace(&variableOccurrence->declaration()).second)
+					continue;
+
 				m_errorReporter.warning(
 					6321_error,
 					variableOccurrence->declaration().location(),
-					"Unnamed return variable can remain unassigned. Add an explicit return with value to all non-reverting code paths or name the variable."
+					(
+						_contractName.empty() ?  "U" :
+						"When called using contract \"" + _contractName + "\" the u"
+					) +
+					"nnamed return variable can remain unassigned. Add an explicit return with value to all non-reverting code paths or name the variable."
 				);
+			}
 		}
 	}
 }
