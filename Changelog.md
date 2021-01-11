@@ -13,6 +13,7 @@ Compiler Features:
  * SMTChecker: Report out of bounds index access for arrays and fixed bytes.
  * Standard JSON: Model checker option ``settings.modelChecker.targets`` also accepts ``outOfBounds``.
  * Yul Optimizer: Added a new step FunctionSpecializer, that specializes a function with its literal arguments.
+ * Yul Optimizer: If all cases of a ``switch`` statement with a default case start with the same prefix, move that prefix out of the ``switch``.
 
 
 Bugfixes:
