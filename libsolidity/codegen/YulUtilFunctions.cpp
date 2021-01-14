@@ -152,6 +152,54 @@ string YulUtilFunctions::storeLiteralInMemoryFunction(string const& _literal)
 	});
 }
 
+string YulUtilFunctions::copyLiteralToStorageFunction(string const& _literal)
+{
+	string functionName = "copy_literal_to_storage_" + util::toHex(util::keccak256(_literal).asBytes());
+
+	return m_functionCollector.createFunction(functionName, [&]() {
+		Whiskers templ(R"(
+			function <functionName>(slot) {
+				<body>
+			}
+		)");
+		templ("functionName", functionName);
+
+		if (_literal.size() >= 32)
+		{
+			size_t words = (_literal.length() + 31) / 32;
+			vector<map<string, string>> wordParams(words);
+			for (size_t i = 0; i < words; ++i)
+			{
+				wordParams[i]["offset"] = to_string(i);
+				wordParams[i]["wordValue"] = formatAsStringOrNumber(_literal.substr(32 * i, 32));
+			}
+			templ("body", Whiskers(R"(
+					<resizeArray>(slot, <length>)
+					let dstPtr := <dataArea>(slot)
+					<#word>
+						sstore(add(dstPtr, <offset>), <wordValue>)
+					</word>
+				)")
+				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage()))
+				("dataArea", arrayDataAreaFunction(*TypeProvider::bytesStorage()))
+				("word", wordParams)
+				("length", to_string(_literal.size()))
+				.render());
+		}
+		else
+			templ("body", Whiskers(R"(
+					<resizeArray>(slot, <length>)
+					sstore(slot, add(<wordValue>, mul(2, <length>)))
+				)")
+				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage()))
+				("wordValue", formatAsStringOrNumber(_literal))
+				("length", to_string(_literal.size()))
+				.render());
+
+		return templ.render();
+	});
+}
+
 string YulUtilFunctions::requireOrAssertFunction(bool _assert, Type const* _messageType)
 {
 	string functionName =
@@ -2635,15 +2683,13 @@ string YulUtilFunctions::updateStorageValueFunction(
 			return Whiskers(R"(
 				function <functionName>(slot<?dynamicOffset>, offset</dynamicOffset>) {
 					<?dynamicOffset>if offset { <panic>() }</dynamicOffset>
-					let value := <copyLiteralToMemory>()
-					<copyToStorage>(slot, value)
+					<copyToStorage>(slot)
 				}
 			)")
 			("functionName", functionName)
 			("dynamicOffset", !_offset.has_value())
 			("panic", panicFunction(PanicCode::Generic))
-			("copyLiteralToMemory", copyLiteralToMemoryFunction(dynamic_cast<StringLiteralType const&>(_fromType).value()))
-			("copyToStorage", copyArrayToStorageFunction(*TypeProvider::bytesMemory(), toArrayType))
+			("copyToStorage", copyLiteralToStorageFunction(dynamic_cast<StringLiteralType const &>(_fromType).value()))
 			.render();
 		}
 
