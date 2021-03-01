@@ -2698,7 +2698,10 @@ string YulUtilFunctions::updateStorageValueFunction(
 			fromReferenceType->isPointer()
 		).get() == *fromReferenceType, "");
 
-		solAssert(toReferenceType->category() == fromReferenceType->category(), "");
+		if (fromReferenceType->category() == Type::Category::ArraySlice)
+			solAssert(toReferenceType->category() == Type::Category::Array, "");
+		else
+			solAssert(toReferenceType->category() == fromReferenceType->category(), "");
 		solAssert(_offset.value_or(0) == 0, "");
 
 		Whiskers templ(R"(
@@ -2711,9 +2714,11 @@ string YulUtilFunctions::updateStorageValueFunction(
 		templ("dynamicOffset", !_offset.has_value());
 		templ("panic", panicFunction(PanicCode::Generic));
 		templ("value", suffixedVariableNameList("value_", 0, _fromType.sizeOnStack()));
-		if (_fromType.category() == Type::Category::Array)
+		if (_fromType.category() == Type::Category::Array || _fromType.category() == Type::Category::ArraySlice)
 			templ("copyToStorage", copyArrayToStorageFunction(
-				dynamic_cast<ArrayType const&>(_fromType),
+				_fromType.category() == Type::Category::Array ?
+				dynamic_cast<ArrayType const&>(_fromType) :
+				dynamic_cast<ArraySliceType const&>(_fromType).arrayType(),
 				dynamic_cast<ArrayType const&>(_toType)
 			));
 		else
