@@ -68,7 +68,8 @@ Object EVMToEwasmTranslator::run(Object const& _object)
 	Block ast = std::get<Block>(Disambiguator(m_dialect, *_object.analysisInfo)(*_object.code));
 	set<YulString> reservedIdentifiers;
 	NameDispenser nameDispenser{m_dialect, ast, reservedIdentifiers};
-	OptimiserStepContext context{m_dialect, nameDispenser, reservedIdentifiers};
+	// 200 is the default value for optimize-runs
+	OptimiserStepContext context{m_dialect, nameDispenser, reservedIdentifiers, 200};
 
 	FunctionHoister::run(context, ast);
 	FunctionGrouper::run(context, ast);

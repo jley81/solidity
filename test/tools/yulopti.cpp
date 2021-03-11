@@ -191,7 +191,7 @@ public:
 			char option = static_cast<char>(readStandardInputChar());
 			cout << ' ' << option << endl;
 
-			OptimiserStepContext context{m_dialect, *m_nameDispenser, reservedIdentifiers};
+			OptimiserStepContext context{m_dialect, *m_nameDispenser, reservedIdentifiers, 200};
 
 			auto abbreviationAndName = abbreviationMap.find(option);
 			if (abbreviationAndName != abbreviationMap.end())
