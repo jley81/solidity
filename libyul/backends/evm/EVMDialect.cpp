@@ -35,6 +35,8 @@
 
 #include <range/v3/view/reverse.hpp>
 
+#include <regex>
+
 using namespace std;
 using namespace solidity;
 using namespace solidity::yul;
@@ -293,6 +295,16 @@ EVMDialect::EVMDialect(langutil::EVMVersion _evmVersion, bool _objectAccess):
 
 BuiltinFunctionForEVM const* EVMDialect::builtin(YulString _name) const
 {
+	if (m_objectAccess)
+	{
+		smatch match;
+		regex static verbatim("verbatim(_(\\d\\d?)i)?(_(\\d\\d?)o)?");
+		if (regex_match(_name.str(), match, verbatim))
+			return verbatimFunction(
+				size_t{match[2].matched ? stoul(match[2]) : 0},
+				size_t{match[4].matched ? stoul(match[4]) : 0}
+			);
+	}
 	auto it = m_functions.find(_name);
 	if (it != m_functions.end())
 		return &it->second;
@@ -302,6 +314,12 @@ BuiltinFunctionForEVM const* EVMDialect::builtin(YulString _name) const
 
 bool EVMDialect::reservedIdentifier(YulString _name) const
 {
+	if (m_objectAccess)
+	{
+		regex static verbatim("verbatim_(\\d\\d?)_(\\d\\d?)");
+		if (regex_match(_name.str(), verbatim))
+			return true;
+	}
 	return m_reserved.count(_name) != 0;
 }
 
@@ -340,6 +358,36 @@ SideEffects EVMDialect::sideEffectsOfInstruction(evmasm::Instruction _instructio
 		translate(evmasm::SemanticInformation::storage(_instruction)),
 		translate(evmasm::SemanticInformation::memory(_instruction)),
 	};
+}
+
+BuiltinFunctionForEVM const* EVMDialect::verbatimFunction(size_t _arguments, size_t _returnVariables) const
+{
+	pair<size_t, size_t> key{_arguments, _returnVariables};
+	shared_ptr<BuiltinFunctionForEVM const>& function = m_verbatimFunctions[key];
+	if (!function)
+	{
+		function = make_shared<BuiltinFunctionForEVM const>(createFunction(
+			"verbatim_" + to_string(_arguments) + "_" + to_string(_returnVariables),
+			1 + _arguments,
+			_returnVariables,
+			SideEffects::worst(),
+			vector<optional<LiteralKind>>{LiteralKind::String} + vector<optional<LiteralKind>>(_arguments),
+			[=](
+				FunctionCall const& _call,
+				AbstractAssembly& _assembly,
+				BuiltinContext&,
+				std::function<void(Expression const&)> _visitExpression
+			) {
+				int diff = static_cast<int>(_returnVariables) - static_cast<int>(_arguments);
+				for (size_t i = _call.arguments.size() - 1; i > 0; --i)
+					_visitExpression(_call.arguments.at(i));
+				yulAssert(_call.arguments.size() >= 1, "");
+				Expression const& arg = _call.arguments.front();
+				_assembly.appendVerbatim(asBytes(std::get<Literal>(arg).value.str()), diff);
+			}
+		).second);
+	}
+	return function.get();
 }
 
 EVMDialectTyped::EVMDialectTyped(langutil::EVMVersion _evmVersion, bool _objectAccess):

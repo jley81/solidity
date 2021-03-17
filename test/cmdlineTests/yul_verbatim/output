@@ -1,0 +1,50 @@
+
+======= yul_verbatim/input.yul (EVM) =======
+
+Pretty printed source:
+object "object" {
+    code {
+        let x := 2
+        let y := sub(x, 2)
+        let t := verbatim_2i_1o("abc", x, y)
+        sstore(t, x)
+        let r := verbatim_1o("def")
+        verbatim("xyz")
+        verbatim("\x01\x02\x03\x04\x05\x06\x07\t\x00\x01\x02\x03\x04\x05\x06\x07\t\x00\x01\x02\x03\x04\x05\x06\x07\t\x00\x01\x02\x01\x02\x03\x04\x05\x06\x07\t\x00\x01\x02\x03\x04\x05\x06\x07\t\x00\x01\x02\x03\x04\x05\x06\x07\t\x00\x01\x02")
+    }
+}
+
+
+Binary representation:
+600260028103808261626382815564656678797a0102030405060709000102030405060709000102030405060709000102010203040506070900010203040506070900010203040506070900010250505050
+
+Text representation:
+    /* "yul_verbatim/input.yul":15:16   */
+  0x02
+    /* "yul_verbatim/input.yul":37:38   */
+  0x02
+    /* "yul_verbatim/input.yul":34:35   */
+  dup2
+    /* "yul_verbatim/input.yul":30:39   */
+  sub
+    /* "yul_verbatim/input.yul":78:79   */
+  dup1
+    /* "yul_verbatim/input.yul":75:76   */
+  dup3
+  verbatimbytecode_616263
+    /* "yul_verbatim/input.yul":95:96   */
+  dup3
+    /* "yul_verbatim/input.yul":92:93   */
+  dup2
+    /* "yul_verbatim/input.yul":85:97   */
+  sstore
+  verbatimbytecode_646566
+    /* "yul_verbatim/input.yul":134:149   */
+  verbatimbytecode_78797a
+    /* "yul_verbatim/input.yul":180:311   */
+  verbatimbytecode_01020304050607090001020304050607090001020304050607090001020102030405060709000102030405060709000102030405060709000102
+    /* "yul_verbatim/input.yul":0:313   */
+  pop
+  pop
+  pop
+  pop

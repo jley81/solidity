@@ -976,6 +976,69 @@ within one Yul subobject. If at least one ``memoryguard`` call is found in a sub
 the additional optimiser steps will be run on it.
 
 
+verbatim
+^^^^^^^^
+
+The set of ``verbatim`` builtin functions lets you create bytecode for opcodes
+that are not known to the Yul compiler. It also allows you to create
+bytecode sequences that will not be modified by the optimizer.
+
+The functions are ``verbatim_<n>i_<m>o("<data>", ...)``, where
+ - ``n`` is a decimal that specifies the number of input stack slots / variables
+ - ``m`` is a decimal that specifies the number of output stack slots / variables
+ - ``data`` is a string literal that contain the sequence of bytes
+
+If ``n`` is or ``m`` is zero, the full part can be left out.
+For example, ``verbatim_2o`` is a function that outputs two stack slots
+and does not consume any, while ``verbatim`` has no effect on the stack
+and ``verbatim_1i`` consumes one stack slot.
+
+If you for example want to define a function that multiplies the input
+by two, without the optimizer touching the constant two, you can use
+
+.. code-block::
+
+    let x := calldataload(0)
+    let double := verbatim_1i_1o(hex"600202, x)
+
+This code will result in a ``dupN`` opcode to retrieve ``x``
+directly followed by ``600202``. The code is assumed to
+consume the copied value of ``x`` and produce the result
+on the top of the stack. The compiler then generates code
+to allocate a stack slot for ``double`` and store the result there.
+
+Since ``verbatim`` can be used to generate arbitrary opcodes
+or even opcodes unknown to the Solidity compiler, care has to be taken
+when using ``verbatim`` together with the optimizer. Even when the
+optimizer is switched off, the code generator has to determine
+the stack layout, which means that e.g. using ``verbatim`` to modify
+the stack height can lead to undefined behaviour.
+
+The following is a (probably incomplete) list of restrictions on
+verbatim bytecode that are not checked by
+the compiler. Violations of these restrictions can result in
+undefined behaviour.
+
+ - Control-flow should not jump into or out of verbatim blocks,
+   but it can jump within the same verbatim block.
+ - Stack contents apart from the input and output parameters
+   should not be accessed.
+ - The stack height difference should be exactly ``m - n``
+   (output slots minus input slots).
+ - Verbatim bytecode cannot make any assumptions about the
+   surrounding bytecode. All requried parameters have to be
+   passed in as stack variables.
+
+The optimizer does not analyze verbatim bytecode and always
+assumes that it modifies all aspects of state and thus can only
+do very few optimizations across ``verbatim`` function calls.
+
+Furthermore, during discussions about whether or not EVM improvements
+might break existing smart contracts, features inside ``verbatim``
+cannot receive the same consideration as those used by the Solidity
+compiler itself.
+
+
 .. _yul-object:
 
 Specification of Yul Object

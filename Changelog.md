@@ -4,6 +4,7 @@ Language Features:
  * Assembly / Yul: Allow hex string literals.
  * Possibility to use ``bytes.concat`` with variable number of ``bytes`` and ``bytesNN`` arguments which behaves as a restricted version of `abi.encodePacked` with a more descriptive name.
  * Support custom errors via the ``error`` keyword and introduce the ``revert`` statement.
+ * Yul: Add ``verbatim`` builtin function to inject arbitrary bytecode.
 
 
 Compiler Features:
