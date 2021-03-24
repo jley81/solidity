@@ -195,6 +195,8 @@ private:
 
 	void setLocation(ASTNode const& _node);
 
+	void appendCurrentLocation();
+
 	std::string linkerSymbol(ContractDefinition const& _library) const;
 
 	std::ostringstream m_code;

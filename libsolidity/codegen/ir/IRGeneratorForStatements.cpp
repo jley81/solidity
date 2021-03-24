@@ -192,9 +192,9 @@ private:
 			solAssert(false, "");
 
 		if (isdigit(value.front()))
-			return yul::Literal{_identifier.location, yul::LiteralKind::Number, yul::YulString{value}, {}};
+			return yul::Literal{_identifier.debugData, yul::LiteralKind::Number, yul::YulString{value}, {}};
 		else
-			return yul::Identifier{_identifier.location, yul::YulString{value}};
+			return yul::Identifier{_identifier.debugData, yul::YulString{value}};
 	}
 
 
@@ -264,6 +264,7 @@ void IRGeneratorForStatements::initializeLocalVar(VariableDeclaration const& _va
 	try
 	{
 		setLocation(_varDecl);
+		appendCurrentLocation();
 
 		solAssert(m_context.isLocalVariable(_varDecl), "Must be a local variable.");
 
@@ -3167,6 +3168,19 @@ bool IRGeneratorForStatements::visit(TryCatchClause const& _clause)
 void IRGeneratorForStatements::setLocation(ASTNode const& _node)
 {
 	m_currentLocation = _node.location();
+}
+
+void IRGeneratorForStatements::appendCurrentLocation()
+{
+	if (m_currentLocation.isValid())
+		m_code <<
+			"/// @origin " <<
+			m_currentLocation.source->name() <<
+			":" <<
+			m_currentLocation.start <<
+			"," <<
+			m_currentLocation.end <<
+			"\n";
 }
 
 string IRGeneratorForStatements::linkerSymbol(ContractDefinition const& _library) const
