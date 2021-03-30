@@ -93,6 +93,7 @@ object \"C_11\" {
             }
 
             function fun_f_10() -> var__5 {
+                /// @origin A:127,133
                 let zero_t_bytes4_1 := zero_value_for_split_t_bytes4()
                 var__5 := zero_t_bytes4_1
 

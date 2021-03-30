@@ -86,6 +86,7 @@ object "test_11" {
             }
 
             function fun_f_10() -> var__5 {
+                /// @origin viair_abicoder_v1/input.sol:133,137
                 let zero_t_bool_1 := zero_value_for_split_t_bool()
                 var__5 := zero_t_bool_1
 
