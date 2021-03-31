@@ -157,3 +157,4 @@ Contents
    bugs.rst
    contributing.rst
    brand-guide.rst
+   language-influences.rst
