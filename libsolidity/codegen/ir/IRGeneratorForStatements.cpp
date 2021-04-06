@@ -404,6 +404,16 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 		assignmentOperator :
 		TokenTraits::AssignmentToBinaryOp(assignmentOperator);
 
+	if (TokenTraits::isShiftOp(binaryOperator))
+		solAssert(type(_assignment.rightHandSide()).mobileType(), "");
+	IRVariable value =
+		type(_assignment.leftHandSide()).isValueType() ?
+		convert(
+			_assignment.rightHandSide(),
+			TokenTraits::isShiftOp(binaryOperator) ? *type(_assignment.rightHandSide()).mobileType() : type(_assignment)
+		) :
+		_assignment.rightHandSide();
+
 	_assignment.leftHandSide().accept(*this);
 
 	solAssert(!!m_currentLValue, "LValue not retrieved.");
@@ -418,14 +428,6 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 		IRVariable leftIntermediate = readFromLValue(*m_currentLValue);
 		solAssert(type(_assignment) == leftIntermediate.type(), "");
 
-		if (TokenTraits::isShiftOp(binaryOperator))
-			solAssert(type(_assignment.rightHandSide()).mobileType(), "");
-
-		IRVariable value = convert(
-			_assignment.rightHandSide(),
-			TokenTraits::isShiftOp(binaryOperator) ? *type(_assignment.rightHandSide()).mobileType() : type(_assignment)
-		);
-
 		define(_assignment) << (
 			TokenTraits::isShiftOp(binaryOperator) ?
 			shiftOperation(binaryOperator, leftIntermediate, value) :
@@ -433,19 +435,18 @@ bool IRGeneratorForStatements::visit(Assignment const& _assignment)
 		) << "\n";
 
 		writeToLValue(*m_currentLValue, IRVariable(_assignment));
-		m_currentLValue.reset();
-		return false;
+	}
+	else
+	{
+		writeToLValue(*m_currentLValue, value);
+
+		if (dynamic_cast<ReferenceType const*>(&m_currentLValue->type))
+			define(_assignment, readFromLValue(*m_currentLValue));
+		else if (*_assignment.annotation().type != *TypeProvider::emptyTuple())
+			define(_assignment, value);
 	}
 
-	writeToLValue(*m_currentLValue, _assignment.rightHandSide());
-
-	if (dynamic_cast<ReferenceType const*>(&m_currentLValue->type))
-		define(_assignment, readFromLValue(*m_currentLValue));
-	else if (*_assignment.annotation().type != *TypeProvider::emptyTuple())
-		define(_assignment, _assignment.rightHandSide());
-
 	m_currentLValue.reset();
-
 	return false;
 }
 
@@ -2849,8 +2850,10 @@ void IRGeneratorForStatements::writeToLValue(IRLValue const& _lvalue, IRVariable
 				}
 				else if (auto const* literalType = dynamic_cast<StringLiteralType const*>(&_value.type()))
 					m_code <<
-						"mstore("s <<
-						_memory.address + ", " <<
+						m_utils.writeToMemoryFunction(*TypeProvider::uint256()) <<
+						"(" <<
+						_memory.address <<
+						", " <<
 						m_utils.copyLiteralToMemoryFunction(literalType->value()) + "()" <<
 						")\n";
 				else

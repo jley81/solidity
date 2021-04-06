@@ -189,11 +189,12 @@ string YulUtilFunctions::copyLiteralToStorageFunction(string const& _literal)
 		else
 			templ("body", Whiskers(R"(
 					<resizeArray>(slot, <length>)
-					sstore(slot, add(<wordValue>, mul(2, <length>)))
+					sstore(slot, add(<wordValue>, <encodedLen>))
 				)")
 				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage()))
 				("wordValue", formatAsStringOrNumber(_literal))
 				("length", to_string(_literal.size()))
+				("encodedLen", to_string(2 * _literal.size()))
 				.render());
 
 		return templ.render();
@@ -2714,13 +2715,22 @@ string YulUtilFunctions::updateStorageValueFunction(
 		templ("dynamicOffset", !_offset.has_value());
 		templ("panic", panicFunction(PanicCode::Generic));
 		templ("value", suffixedVariableNameList("value_", 0, _fromType.sizeOnStack()));
-		if (_fromType.category() == Type::Category::Array || _fromType.category() == Type::Category::ArraySlice)
+		if (_fromType.category() == Type::Category::Array)
 			templ("copyToStorage", copyArrayToStorageFunction(
-				_fromType.category() == Type::Category::Array ?
-				dynamic_cast<ArrayType const&>(_fromType) :
+				dynamic_cast<ArrayType const&>(_fromType),
+				dynamic_cast<ArrayType const&>(_toType)
+			));
+		else if (_fromType.category() == Type::Category::ArraySlice)
+		{
+			solAssert(
+				_fromType.dataStoredIn(DataLocation::CallData),
+				"Currently only calldata array slices are supported!"
+			);
+			templ("copyToStorage", copyArrayToStorageFunction(
 				dynamic_cast<ArraySliceType const&>(_fromType).arrayType(),
 				dynamic_cast<ArrayType const&>(_toType)
 			));
+		}
 		else
 			templ("copyToStorage", copyStructToStorageFunction(
 				dynamic_cast<StructType const&>(_fromType),

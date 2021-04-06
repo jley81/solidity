@@ -280,13 +280,38 @@ bool ExpressionCompiler::visit(Assignment const& _assignment)
 	_assignment.rightHandSide().accept(*this);
 	// Perform some conversion already. This will convert storage types to memory and literals
 	// to their actual type, but will not convert e.g. memory to storage.
-	Type const* rightIntermediateType;
-	if (op != Token::Assign && TokenTraits::isShiftOp(binOp))
-		rightIntermediateType = _assignment.rightHandSide().annotation().type->mobileType();
-	else
-		rightIntermediateType = _assignment.rightHandSide().annotation().type->closestTemporaryType(
-			_assignment.leftHandSide().annotation().type
-		);
+	function<Type const*(Type const*, Type const*)> closestType = [op, binOp, &closestType](
+		Type const* _type,
+		Type const* _targetType
+	) -> Type const* {
+		if (op != Token::Assign && TokenTraits::isShiftOp(binOp))
+			return _type->mobileType();
+		else
+			if (_type->category() != Type::Category::Tuple)
+				return _targetType->dataStoredIn(DataLocation::Storage) ? _type->mobileType() : _targetType;
+			else
+			{
+				auto const& tupleType = dynamic_cast<TupleType const&>(*_type);
+				solAssert(_targetType, "");
+				TypePointers const& targetComponents = dynamic_cast<TupleType const&>(*_targetType).components();
+				solAssert(tupleType.components().size() == targetComponents.size(), "");
+				TypePointers tempComponents(targetComponents.size());
+				for (size_t i = 0; i < targetComponents.size(); ++i)
+				{
+					if (tupleType.components()[i] && targetComponents[i])
+					{
+						tempComponents[i] = closestType(tupleType.components()[i], targetComponents[i]);
+						solAssert(tempComponents[i], "");
+					}
+				}
+				return TypeProvider::tuple(move(tempComponents));
+			}
+	};
+	Type const* rightIntermediateType = closestType(
+		_assignment.rightHandSide().annotation().type,
+		_assignment.leftHandSide().annotation().type
+	);
+
 	solAssert(rightIntermediateType, "");
 	utils().convertType(*_assignment.rightHandSide().annotation().type, *rightIntermediateType, cleanupNeeded);
 
@@ -1016,7 +1041,10 @@ bool ExpressionCompiler::visit(FunctionCall const& _functionCall)
 				// stack: argValue storageSlot slotOffset
 				utils().moveToStackTop(2, argType->sizeOnStack());
 				// stack: storageSlot slotOffset argValue
-				Type const* type = arguments[0]->annotation().type->closestTemporaryType(arrayType->baseType());
+				Type const* type =
+					arrayType->baseType()->dataStoredIn(DataLocation::Storage) ?
+					arguments[0]->annotation().type->mobileType() :
+					arrayType->baseType();
 				solAssert(type, "");
 				utils().convertType(*argType, *type);
 				utils().moveToStackTop(1 + type->sizeOnStack());
