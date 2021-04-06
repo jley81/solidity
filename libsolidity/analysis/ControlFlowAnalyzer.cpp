@@ -165,18 +165,20 @@ void ControlFlowAnalyzer::checkUninitializedAccess(CFGNode const* _entry, CFGNod
 
 		for (auto const* variableOccurrence: uninitializedAccessesOrdered)
 		{
+			VariableDeclaration const& varDecl = variableOccurrence->declaration();
+
 			SecondarySourceLocation ssl;
 			if (variableOccurrence->occurrence())
-				ssl.append("The variable was declared here.", variableOccurrence->declaration().location());
+				ssl.append("The variable was declared here.", varDecl.location());
 
-			bool isStorage = variableOccurrence->declaration().type()->dataStoredIn(DataLocation::Storage);
-			bool isCalldata = variableOccurrence->declaration().type()->dataStoredIn(DataLocation::CallData);
+			bool isStorage = varDecl.type()->dataStoredIn(DataLocation::Storage);
+			bool isCalldata = varDecl.type()->dataStoredIn(DataLocation::CallData);
 			if (isStorage || isCalldata)
 				m_errorReporter.typeError(
 					3464_error,
 					variableOccurrence->occurrence() ?
 						*variableOccurrence->occurrence() :
-						variableOccurrence->declaration().location(),
+						varDecl.location(),
 					ssl,
 					"This variable is of " +
 					string(isStorage ? "storage" : "calldata") +
@@ -184,14 +186,14 @@ void ControlFlowAnalyzer::checkUninitializedAccess(CFGNode const* _entry, CFGNod
 					(variableOccurrence->kind() == VariableOccurrence::Kind::Return ? "returned" : "accessed") +
 					" without prior assignment, which would lead to undefined behaviour."
 				);
-			else if (!_emptyBody && variableOccurrence->declaration().name().empty())
+			else if (!_emptyBody && varDecl.name().empty())
 			{
-				if (!m_previousWarnings.emplace(&variableOccurrence->declaration()).second)
+				if (!m_previousWarnings.emplace(&varDecl).second)
 					continue;
 
 				m_errorReporter.warning(
 					6321_error,
-					variableOccurrence->declaration().location(),
+					varDecl.location(),
 					(
 						_contractName.empty() ?  "U" :
 						"When called using contract \"" + _contractName + "\" the u"
