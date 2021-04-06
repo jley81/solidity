@@ -151,6 +151,7 @@ Contents
    smtchecker.rst
    resources.rst
    using-the-compiler.rst
+   analysing-compilation-output.rst
    yul.rst
    style-guide.rst
    common-patterns.rst
