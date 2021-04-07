@@ -227,12 +227,16 @@ void ControlFlowAnalyzer::checkUnreachable(CFGNode const* _entry, CFGNode const*
 		}
 	);
 
+	std::set<SourceLocation> reportedErrors;
+
 	for (auto it = unreachable.begin(); it != unreachable.end();)
 	{
 		SourceLocation location = *it++;
 		// Extend the location, as long as the next location overlaps (unreachable is sorted).
 		for (; it != unreachable.end() && it->start <= location.end; ++it)
 			location.end = std::max(location.end, it->end);
-		m_errorReporter.warning(5740_error, location, "Unreachable code.");
+
+		if (reportedErrors.emplace(location).second)
+			m_errorReporter.warning(5740_error, location, "Unreachable code.");
 	}
 }
