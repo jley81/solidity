@@ -35,6 +35,24 @@ using namespace solidity;
 using namespace solidity::util;
 using namespace solidity::frontend;
 
+string YulUtilFunctions::resizeModeToString(ResizeArrayMode _resizeMode)
+{
+	string result;
+	switch (_resizeMode)
+	{
+	case YulUtilFunctions::ResizeArrayMode::Rewrite:
+		result = "rewrite";
+		break;
+	case YulUtilFunctions::ResizeArrayMode::PushPop:
+		result = "pushpop";
+		break;
+	case YulUtilFunctions::ResizeArrayMode::Delete:
+		result = "delete";
+		break;
+	}
+	return result;
+}
+
 string YulUtilFunctions::combineExternalFunctionIdFunction()
 {
 	string functionName = "combine_external_function_id";
@@ -175,12 +193,13 @@ string YulUtilFunctions::copyLiteralToStorageFunction(string const& _literal)
 			}
 			templ("body", Whiskers(R"(
 					<resizeArray>(slot, <length>)
+					sstore(slot, add(1, mul(2, <length>)))
 					let dstPtr := <dataArea>(slot)
 					<#word>
 						sstore(add(dstPtr, <offset>), <wordValue>)
 					</word>
 				)")
-				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage()))
+				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage(), ResizeArrayMode::Rewrite))
 				("dataArea", arrayDataAreaFunction(*TypeProvider::bytesStorage()))
 				("word", wordParams)
 				("length", to_string(_literal.size()))
@@ -191,7 +210,7 @@ string YulUtilFunctions::copyLiteralToStorageFunction(string const& _literal)
 					<resizeArray>(slot, <length>)
 					sstore(slot, add(<wordValue>, <encodedLen>))
 				)")
-				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage()))
+				("resizeArray", resizeDynamicByteArrayFunction(*TypeProvider::bytesStorage(), ResizeArrayMode::Rewrite))
 				("wordValue", formatAsStringOrNumber(_literal))
 				("length", to_string(_literal.size()))
 				("encodedLen", to_string(2 * _literal.size()))
@@ -1193,15 +1212,15 @@ string YulUtilFunctions::extractByteArrayLengthFunction()
 	});
 }
 
-std::string YulUtilFunctions::resizeArrayFunction(ArrayType const& _type)
+std::string YulUtilFunctions::resizeArrayFunction(ArrayType const& _type, ResizeArrayMode _resizeMode)
 {
 	solAssert(_type.location() == DataLocation::Storage, "");
 	solUnimplementedAssert(_type.baseType()->storageBytes() <= 32, "...");
 
 	if (_type.isByteArray())
-		return resizeDynamicByteArrayFunction(_type);
+		return resizeDynamicByteArrayFunction(_type, _resizeMode);
 
-	string functionName = "resize_array_" + _type.identifier();
+	string functionName = "resize_array_" + _type.identifier() + "_resize_mode_" + resizeModeToString(_resizeMode);
 	return m_functionCollector.createFunction(functionName, [&]() {
 		Whiskers templ(R"(
 			function <functionName>(array, newLen) {
@@ -1255,9 +1274,9 @@ std::string YulUtilFunctions::resizeArrayFunction(ArrayType const& _type)
 	});
 }
 
-string YulUtilFunctions::resizeDynamicByteArrayFunction(ArrayType const& _type)
+string YulUtilFunctions::resizeDynamicByteArrayFunction(ArrayType const& _type, ResizeArrayMode _resizeMode)
 {
-	string functionName = "resize_array_" + _type.identifier();
+	string functionName = "resize_array_" + _type.identifier() + "_resize_mode_" + resizeModeToString(_resizeMode);
 	return m_functionCollector.createFunction(functionName, [&]() {
 		return Whiskers(R"(
 			function <functionName>(array, newLen) {
@@ -1268,9 +1287,11 @@ string YulUtilFunctions::resizeDynamicByteArrayFunction(ArrayType const& _type)
 				let data := sload(array)
 				let oldLen := <extractLength>(data)
 
-				if gt(newLen, oldLen) {
-					<increaseSize>(array, data, oldLen, newLen)
-				}
+				<?notRewriting>
+					if gt(newLen, oldLen) {
+						<increaseSize>(array, data, oldLen, newLen)
+					}
+				</notRewriting>
 
 				if lt(newLen, oldLen) {
 					<decreaseSize>(array, data, oldLen, newLen)
@@ -1280,15 +1301,19 @@ string YulUtilFunctions::resizeDynamicByteArrayFunction(ArrayType const& _type)
 			("panic", panicFunction(PanicCode::ResourceError))
 			("extractLength", extractByteArrayLengthFunction())
 			("maxArrayLength", (u256(1) << 64).str())
-			("decreaseSize", decreaseByteArraySizeFunction(_type))
-			("increaseSize", increaseByteArraySizeFunction(_type))
+			("decreaseSize", decreaseByteArraySizeFunction(_type, _resizeMode))
+			("notRewriting", _resizeMode != ResizeArrayMode::Rewrite)
+			(
+				"increaseSize",
+				(_resizeMode != ResizeArrayMode::Rewrite) ? increaseByteArraySizeFunction(_type) : ""
+			)
 			.render();
 	});
 }
 
-string YulUtilFunctions::decreaseByteArraySizeFunction(ArrayType const& _type)
+string YulUtilFunctions::decreaseByteArraySizeFunction(ArrayType const& _type, ResizeArrayMode _resizeMode)
 {
-	string functionName = "byte_array_decrease_size_" + _type.identifier();
+	string functionName = "byte_array_decrease_size_" + _type.identifier() + "_resize_mode_" + resizeModeToString(_resizeMode);
 	return m_functionCollector.createFunction(functionName, [&]() {
 		return Whiskers(R"(
 			function <functionName>(array, data, oldLen, newLen) {
@@ -1303,18 +1328,26 @@ string YulUtilFunctions::decreaseByteArraySizeFunction(ArrayType const& _type)
 
 					<clearStorageRange>(deleteStart, add(arrayDataStart, div(add(oldLen, 31), 32)))
 
-					sstore(array, or(mul(2, newLen), 1))
+					<?notRewriting>
+						sstore(array, or(mul(2, newLen), 1))
+					</notRewriting>
 				}
 				default {
 					switch gt(oldLen, 31)
 					case 1 {
 						let arrayDataStart := <dataPosition>(array)
+						<?notRewriting>
+							<transitLongToShort>(array, newLen)
+							arrayDataStart := add(arrayDataStart, 1)
+						</notRewriting>
 						// clear whole old array, as we are transforming to short bytes array
-						<clearStorageRange>(add(arrayDataStart, 1), add(arrayDataStart, div(add(oldLen, 31), 32)))
-						<transitLongToShort>(array, newLen)
+						<clearStorageRange>(arrayDataStart, add(arrayDataStart, div(add(oldLen, 31), 32)))
+
 					}
 					default {
-						sstore(array, <encodeUsedSetLen>(data, newLen))
+						<?notRewriting>
+							sstore(array, <encodeUsedSetLen>(data, newLen))
+						</notRewriting>
 					}
 				}
 			})")
@@ -1322,6 +1355,7 @@ string YulUtilFunctions::decreaseByteArraySizeFunction(ArrayType const& _type)
 			("dataPosition", arrayDataAreaFunction(_type))
 			("partialClearStorageSlot", partialClearStorageSlotFunction())
 			("clearStorageRange", clearStorageRangeFunction(*_type.baseType()))
+			("notRewriting", _resizeMode != ResizeArrayMode::Rewrite)
 			("transitLongToShort", byteArrayTransitLongToShortFunction(_type))
 			("encodeUsedSetLen", shortByteArrayEncodeUsedAreaSetLengthFunction())
 			.render();
@@ -1643,7 +1677,7 @@ string YulUtilFunctions::clearStorageArrayFunction(ArrayType const& _type)
 		)")
 		("functionName", functionName)
 		("dynamic", _type.isDynamicallySized())
-		("resizeArray", _type.isDynamicallySized() ? resizeArrayFunction(_type) : "")
+		("resizeArray", _type.isDynamicallySized() ? resizeArrayFunction(_type, ResizeArrayMode::Delete) : "")
 		(
 			"clearRange",
 			_type.baseType()->category() != Type::Category::Mapping ?
@@ -1791,7 +1825,7 @@ string YulUtilFunctions::copyArrayToStorageFunction(ArrayType const& _fromType, 
 			if (_fromType.baseType()->isDynamicallyEncoded())
 				templ("accessCalldataTail", accessCalldataTailFunction(*_fromType.baseType()));
 		}
-		templ("resizeArray", resizeArrayFunction(_toType));
+		templ("resizeArray", resizeArrayFunction(_toType, ResizeArrayMode::Rewrite));
 		templ("arrayLength",arrayLengthFunction(_fromType));
 		templ("isValueType", _fromType.baseType()->isValueType());
 		templ("dstDataLocation", arrayDataAreaFunction(_toType));
@@ -1989,7 +2023,7 @@ string YulUtilFunctions::copyValueArrayStorageToStorageFunction(ArrayType const&
 		if (_fromType.dataStoredIn(DataLocation::Storage))
 			solAssert(!_fromType.isValueType(), "");
 		templ("functionName", functionName);
-		templ("resizeArray", resizeArrayFunction(_toType));
+		templ("resizeArray", resizeArrayFunction(_toType, ResizeArrayMode::Rewrite));
 		templ("arrayLength",arrayLengthFunction(_fromType));
 		templ("panic", panicFunction(PanicCode::ResourceError));
 		templ("srcDataLocation", arrayDataAreaFunction(_fromType));

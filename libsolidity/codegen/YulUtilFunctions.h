@@ -206,10 +206,17 @@ public:
 	/// signature: (data) -> length
 	std::string extractByteArrayLengthFunction();
 
+	enum class ResizeArrayMode {
+		Rewrite,
+		PushPop,
+		Delete
+	};
+	static std::string resizeModeToString(ResizeArrayMode _resizeMode);
+
 	/// @returns the name of a function that resizes a storage array
 	/// for statically sized arrays, it will just clean-up elements of array starting from newLen until the end
 	/// signature: (array, newLen)
-	std::string resizeArrayFunction(ArrayType const& _type);
+	std::string resizeArrayFunction(ArrayType const& _type, ResizeArrayMode _resizeMode);
 
 	/// @returns the name of a function that reduces the size of a storage array by one element
 	/// signature: (array)
@@ -535,7 +542,7 @@ private:
 
 	/// @returns the name of a function that resizes a storage byte array
 	/// signature: (array, newLen)
-	std::string resizeDynamicByteArrayFunction(ArrayType const& _type);
+	std::string resizeDynamicByteArrayFunction(ArrayType const& _type, ResizeArrayMode _resizeMode);
 
 	/// @returns the name of a function that increases size of byte array
 	/// when we resize byte array frextractUsedSetLenom < 32 elements to >= 32 elements or we push to byte array of size 31 copying of data will  occur
@@ -545,7 +552,7 @@ private:
 	/// @returns the name of a function that decreases size of byte array
 	/// when we resize byte array from >= 32 elements to < 32 elements or we pop from byte array of size 32 copying of data will  occur
 	/// signature: (array, data, oldLen, newLen)
-	std::string decreaseByteArraySizeFunction(ArrayType const& _type);
+	std::string decreaseByteArraySizeFunction(ArrayType const& _type, ResizeArrayMode _resizeMode);
 
 	/// @returns the name of a function that sets size of short byte array while copying data
 	/// should be called when we resize from long byte array (more than 32 elements) to short byte array
