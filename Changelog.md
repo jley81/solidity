@@ -13,6 +13,7 @@ Compiler Features:
  * SMTChecker: Deprecate ``pragma experimental SMTChecker;`` and set default model checker engine to ``none``.
  * SMTChecker: Report local variables in CHC counterexamples.
  * SMTChecker: Report out of bounds index access for arrays and fixed bytes.
+ * SMTChecker: Support file level functions and constants.
  * Standard JSON: Model checker option ``settings.modelChecker.targets`` also accepts ``outOfBounds``.
  * Yul Optimizer: Added a new step FunctionSpecializer, that specializes a function with its literal arguments.
  * Yul EVM Code Transform: Stack Optimization: Reuse slots of unused function arguments and defer allocating stack slots for return variables until after expression statements and assignments that do not reference them.
